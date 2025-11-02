@@ -1,0 +1,5 @@
+server:
+  port: 8080
+
+ipfs:
+  api: "http://127.0.0.1:5001"
