@@ -5,23 +5,26 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="ebd583a8-2f17-49a3-8acd-c7a5e30e07da" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/emb/EmbeddingService.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/index/VersionVectorService.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/pubsub/PubSubService.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/jarRepositories.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs/IpfsClient.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/model/IndexUpdate.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/model/PubSubMsg.java" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/store/LocalIndexStore.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/consensus/AckCollector.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/consensus/AckService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/pubsub/PubSubSubscriber.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/store/PeerState.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../brain/build.gradle" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/build.gradle" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../brain/demo.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/d1.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/d2.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/d3.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/index/VersionVectorService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/index/VersionVectorService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/ipfs/IpfsClient.java" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/ipfs/IpfsClient.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/pubsub/PubSubService.java" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/pubsub/PubSubService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/rest/DocumentController.java" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/java/io/sd/brain/rest/DocumentController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/../brain/src/test/java/io/sd/brain/BrainApplicationTests.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/resources/application.properties" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../brain/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/../brain/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/gradle.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/gradle.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs/IpfsClient.java" beforeDir="false" afterPath="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs/IpfsClient.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/index.jsonl" beforeDir="false" afterPath="$PROJECT_DIR$/data/index.jsonl" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -43,22 +46,22 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "barbosapaiva"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;barbosapaiva&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/barbosapaiva/system-distrib-docs.git",
-    "accountId": "e10f0156-85de-4b31-9c8d-a0920fadf69f"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/barbosapaiva/system-distrib-docs.git&quot;,
+    &quot;accountId&quot;: &quot;e10f0156-85de-4b31-9c8d-a0920fadf69f&quot;
   }
-}]]></component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "customColor": "",
-  "associatedIndex": 1
-}]]></component>
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 1
+}</component>
   <component name="ProjectId" id="34w3I4QEQpYbzGEKVfSyjBQtClT" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
@@ -66,12 +69,13 @@
   </component>
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
+    "Application.processor.executor": "Run",
     "Gradle.Build processor.executor": "Run",
     "Gradle.processor.executor": "Run",
-    "Gradle.processor:app [:app:io.sd.processor.Main.main()].executor": "Run",
+    "Gradle.processor:app [:app:io.sd.processor.Main.main()].executor": "Debug",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "s2-index-pubsub-java",
+    "git-widget-placeholder": "master",
     "kotlin-language-version-configured": "true",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -88,6 +92,17 @@
     <key name="MoveFile.RECENT_KEYS">
       <recent name="$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs" />
     </key>
+  </component>
+  <component name="RunManager">
+    <configuration name="processor" type="Application" factoryName="Application">
+      <option name="ALTERNATIVE_JRE_PATH" value="temurin-21" />
+      <option name="ALTERNATIVE_JRE_PATH_ENABLED" value="true" />
+      <option name="MAIN_CLASS_NAME" value="io.sd.processor.Main" />
+      <module name="processor.app.main" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
   </component>
   <component name="SharedIndexes">
     <attachedChunks>
@@ -106,10 +121,48 @@
       <option name="presentableId" value="Default" />
       <updated>1762110723951</updated>
       <workItem from="1762110725273" duration="7090000" />
+      <workItem from="1762715040647" duration="12380000" />
+      <workItem from="1762730318738" duration="2947000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java</url>
+          <line>118</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java</url>
+          <line>148</line>
+          <option name="timeStamp" value="3" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java</url>
+          <line>172</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ProcessorApp.java</url>
+          <line>212</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs/IpfsClient.java</url>
+          <line>41</line>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="java-line">
+          <url>file://$PROJECT_DIR$/app/src/main/java/io/sd/processor/ipfs/IpfsClient.java</url>
+          <line>39</line>
+          <option name="timeStamp" value="7" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>

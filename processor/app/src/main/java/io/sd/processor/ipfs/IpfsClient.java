@@ -1,7 +1,6 @@
 package io.sd.processor.ipfs;
 
 import okhttp3.*;
-import okio.BufferedSource;
 
 import java.io.Closeable;
 import java.nio.charset.StandardCharsets;
@@ -38,11 +37,9 @@ public class IpfsClient implements Closeable {
                 .addQueryParameter("arg", topicMb)
                 .build();
 
-        // 1ª tentativa: GET (em algumas versões funciona)
         Request getReq = new Request.Builder().url(url).get().build();
         Response resp = http.newCall(getReq).execute();
         if (resp.code() == 405) {
-            // 2ª tentativa: POST body vazio (outras versões exigem POST)
             resp.close();
             Request postReq = new Request.Builder()
                     .url(url)
