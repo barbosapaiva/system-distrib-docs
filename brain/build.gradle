@@ -29,4 +29,6 @@ dependencies {
 	runtimeOnly 'ai.djl.pytorch:pytorch-engine'                         // DJL PyTorch Engine
 	runtimeOnly 'ai.djl.pytorch:pytorch-native-cpu:2.7.1:osx-aarch64'    // Native lib for macOS ARM64
 	runtimeOnly 'ai.djl.pytorch:pytorch-jni:2.7.1-0.35.0'               // JNI bridge for PyTorch engine
+
+	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

@@ -49,7 +49,6 @@ public class PubSubService {
                     .retrieve()
                     .toBodilessEntity();
         } catch (RestClientResponseException ex) {
-            // Isto ajuda-te a ver o erro real do IPFS em logs
             String msg = "Falha no publish PubSub: " + ex.getRawStatusCode() + " " + ex.getStatusText()
                     + " body=" + ex.getResponseBodyAsString();
             throw new RuntimeException(msg, ex);
