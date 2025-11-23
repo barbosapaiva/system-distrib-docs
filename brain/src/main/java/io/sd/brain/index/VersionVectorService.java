@@ -14,15 +14,19 @@ public class VersionVectorService {
     private final List<String> committed = new ArrayList<>();
     private final AtomicInteger currentVersion = new AtomicInteger(0);
 
+    public synchronized List<String> currentCids(String newCid) {
+        List<String> out = new ArrayList<>(committed);
+        out.add(newCid);
+        return out;
+    }
+
     /** Cria o candidato (v = prev+1) sem confirmar a versão atual. */
     public synchronized IndexUpdate buildCandidate(String cid, String name, int vectorDim, float[] vector) {
         int prev = currentVersion.get();
         int next = prev + 1;
 
-        List<String> candidate = new ArrayList<>(committed);
-        candidate.add(cid);
-
-        String cidsHash = sha256Hex("sha256:", String.join("|", candidate)); // hash do vetor de CIDs
+        List<String> cids = currentCids(cid);
+        String cidsHash = sha256Hex("sha256:", String.join("|", cids));
 
         return new IndexUpdate(
                 "index_update",
@@ -33,7 +37,8 @@ public class VersionVectorService {
                 vectorDim,
                 vector,
                 cidsHash,
-                System.currentTimeMillis() // ts em millis
+                System.currentTimeMillis(),
+                cids// ts em millis
         );
     }
 
@@ -57,7 +62,7 @@ public class VersionVectorService {
             return sb.toString();
         } catch (Exception e) { throw new RuntimeException(e); }
     }
-    
+
     public static final class IndexUpdate {
         private final String kind;
         private final int version;
@@ -68,9 +73,10 @@ public class VersionVectorService {
         private final float[] vector;
         private final String cids_hash;
         private final long ts;
+        private final List<String> cids;
 
         public IndexUpdate(String kind, int version, int prev_version, String cid, String name,
-                           int vector_dim, float[] vector, String cids_hash, long ts) {
+                           int vector_dim, float[] vector, String cids_hash, long ts, List<String> cids) {
             this.kind = kind;
             this.version = version;
             this.prev_version = prev_version;
@@ -80,6 +86,7 @@ public class VersionVectorService {
             this.vector = vector;
             this.cids_hash = cids_hash;
             this.ts = ts;
+            this.cids = cids;
         }
 
         public String kind()        { return kind; }
@@ -91,5 +98,6 @@ public class VersionVectorService {
         public float[] vector()     { return vector; }
         public String cids_hash()   { return cids_hash; }
         public long ts()            { return ts; }
+        public List<String> cids(){ return cids; }
     }
 }

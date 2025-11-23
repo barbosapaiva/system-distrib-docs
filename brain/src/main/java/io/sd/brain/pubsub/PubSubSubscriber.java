@@ -85,7 +85,7 @@ public class PubSubSubscriber {
     }
 
     /** Codifica o tópico em multibase (base64url sem padding) com prefixo 'u'. */
-    private static String encodeTopic(String topic) {
+    static String encodeTopic(String topic) {
         return "u" + java.util.Base64.getUrlEncoder()
                 .withoutPadding()
                 .encodeToString(topic.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -173,6 +173,7 @@ public class PubSubSubscriber {
                         case "commit" -> {
                             log.debug("Commit visto no líder (ignorado).");
                         }
+                        case "hb" -> log.debug("Heartbeat recebido: {}", text);
                         default -> log.warn("Mensagem desconhecida kind={}, payload={}", kind, text);
                     }
                 } catch (Exception perLine) {
