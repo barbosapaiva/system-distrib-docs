@@ -84,4 +84,14 @@ public class IpfsClient {
             return null;
         }
     }
+
+    public byte[] cat(String cid) throws IOException {
+        var url = URI.create(apiBase + "/api/v0/cat?arg=" + cid).toURL();
+        var conn = (HttpURLConnection) url.openConnection();
+        conn.setDoOutput(true);
+        conn.setRequestMethod("POST");
+        int code = conn.getResponseCode();
+        if (code != 200) throw new IOException("IPFS cat falhou (" + code + ")");
+        try (var in = conn.getInputStream()) { return in.readAllBytes(); }
+    }
 }
