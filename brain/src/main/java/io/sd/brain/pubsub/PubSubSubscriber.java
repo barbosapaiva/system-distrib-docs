@@ -2,6 +2,7 @@ package io.sd.brain.pubsub;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.sd.brain.cluster.NodeRoleManager;
 import io.sd.brain.consensus.AckService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -24,18 +25,19 @@ import java.util.concurrent.TimeUnit;
  * - Extrai o "data" (base64/base64url), decodifica e processa o JSON interno
  * - Para "kind":"ack", regista no AckService (versão, peer_id, hash)
  */
-@Service
 public class PubSubSubscriber {
 
     private static final Logger log = LoggerFactory.getLogger(PubSubSubscriber.class);
 
-    private final String ipfsApiBase;     // ex: http://127.0.0.1:5001/api/v0
-    private final String topic;           // ex: sd-index
+    private final String ipfsApiBase;
+    private final String topic;
     private final AckService ackService;
     private final ObjectMapper om = new ObjectMapper();
+    private final ClusterState cluster;
+    private final NodeRoleManager roles;
 
     private final OkHttpClient http = new OkHttpClient.Builder()
-            .readTimeout(Duration.ofMinutes(0))     // stream infinito
+            .readTimeout(Duration.ofMinutes(0))
             .callTimeout(Duration.ofMinutes(0))
             .retryOnConnectionFailure(true)
             .build();
@@ -43,14 +45,13 @@ public class PubSubSubscriber {
     private volatile boolean running = true;
     private Thread thread;
 
-    public PubSubSubscriber(
-            @Value("${ipfs.api}") String ipfsApi,
-            @Value("${pubsub.topic:sd-index}") String topic,
-            AckService ackService
-    ) {
+    public PubSubSubscriber(String ipfsApi, String topic, AckService ackService,
+                            ClusterState cluster, NodeRoleManager roles) {
         this.ipfsApiBase = ipfsApi.endsWith("/api/v0") ? ipfsApi : ipfsApi + "/api/v0";
         this.topic = topic;
         this.ackService = ackService;
+        this.cluster = cluster;
+        this.roles = roles;
     }
 
     @PostConstruct
@@ -68,7 +69,6 @@ public class PubSubSubscriber {
         log.info("PubSubSubscriber parado.");
     }
 
-    /** Loop com backoff exponencial para manter a subscrição viva. */
     private void loop() {
         int backoff = 2;
         while (running) {
@@ -84,7 +84,6 @@ public class PubSubSubscriber {
         }
     }
 
-    /** Codifica o tópico em multibase (base64url sem padding) com prefixo 'u'. */
     static String encodeTopic(String topic) {
         return "u" + java.util.Base64.getUrlEncoder()
                 .withoutPadding()
@@ -97,12 +96,12 @@ public class PubSubSubscriber {
         HttpUrl url = HttpUrl.parse(ipfsApiBase)
                 .newBuilder()
                 .addPathSegments("pubsub/sub")
-                .addQueryParameter("arg", encTopic) // se o teu nó pedir "topic", troca aqui
+                .addQueryParameter("arg", encTopic)
                 .build();
 
         Request req = new Request.Builder()
                 .url(url)
-                .post(RequestBody.create(new byte[0], null)) // POST vazio → evita 405
+                .post(RequestBody.create(new byte[0], null))
                 .build();
 
         Response resp = http.newCall(req).execute();
@@ -111,15 +110,14 @@ public class PubSubSubscriber {
             if (resp.body() != null) resp.close();
             throw new IllegalStateException("HTTP " + resp.code() + (body != null ? " body="+body : ""));
         }
-        return resp; // manter aberto para ler o stream (NDJSON)
+        return resp;
     }
 
-    /** Um ciclo de subscrição: lê linhas NDJSON e processa payloads. */
     private void subscribeOnce() throws Exception {
         try (Response resp = openSubscription()) {
             BufferedSource src = resp.body().source();
             while (running) {
-                String line = src.readUtf8LineStrict(); // bloqueia até ter 1 linha
+                String line = src.readUtf8LineStrict();
                 if (line == null || line.isBlank()) continue;
 
                 try {
@@ -138,7 +136,6 @@ public class PubSubSubscriber {
 
                     String text = new String(payload, StandardCharsets.UTF_8).trim();
                     if (text.isBlank()) continue;
-
                     if ("ping".equalsIgnoreCase(text) || text.startsWith("ping")) {
                         log.debug("Ping recebido do PubSub.");
                         continue;
@@ -149,31 +146,40 @@ public class PubSubSubscriber {
 
                     switch (kind) {
                         case "ack" -> {
+                            if (!roles.isLeader()) break; // só o líder precisa registar ACKs
                             long version = msg.path("version").asLong(0);
                             String peerId = msg.path("peer_id").asText("");
                             String status = msg.path("status").asText("ok");
                             String hash = msg.path("hash").asText("");
 
-                            if (!"ok".equalsIgnoreCase(status)) {
-                                log.warn("ACK com status != ok: {}", text);
+                            if (!"ok".equalsIgnoreCase(status) || version <= 0 || hash.isBlank()) {
+                                log.warn("ACK inválido: {}", text);
                                 break;
                             }
-                            if (version <= 0 || hash.isBlank()) {
-                                log.warn("ACK inválido (sem version/hash): {}", text);
-                                break;
-                            }
-
                             boolean maj = ackService.register(version, peerId, hash);
                             log.info("ACK registado: version={} peer={} hash={} (maioria? {})",
                                     version, peerId, hash, maj);
                         }
                         case "prepare" -> {
-                            log.debug("Prepare visto no líder (ignorado).");
+                            log.debug("Prepare visto (subscriber) - sem ação aqui.");
                         }
                         case "commit" -> {
-                            log.debug("Commit visto no líder (ignorado).");
+                            log.debug("Commit visto (subscriber) - sem ação aqui.");
                         }
-                        case "hb" -> log.debug("Heartbeat recebido: {}", text);
+                        case "hb" -> {
+                            long term = msg.path("term").asLong(0L);
+                            String id = msg.path("id").asText("");
+                            long ts = msg.path("ts").asLong(System.currentTimeMillis());
+                            long v = msg.path("version").asLong(0L);
+                            String idx = msg.path("index_cid").asText(null);
+
+                            roles.observeHeartbeat(term, id, ts);
+                            cluster.setTermAndLeader(term, id);
+                            if (v > 0 && idx != null && !idx.isBlank()) {
+                                cluster.setVersionAndIndexCid(v, idx);
+                            }
+                            log.debug("Heartbeat recebido: term={} leader={} version={} idx={}", term, id, v, idx);
+                        }
                         default -> log.warn("Mensagem desconhecida kind={}, payload={}", kind, text);
                     }
                 } catch (Exception perLine) {
@@ -183,7 +189,6 @@ public class PubSubSubscriber {
         }
     }
 
-    /** Decoder tolerante: aceita base64 OU base64url (multibase 'u'), ajusta padding. */
     private static byte[] decodeIpfsData(String b64) {
         if (b64 == null) return new byte[0];
         String s = b64.trim();

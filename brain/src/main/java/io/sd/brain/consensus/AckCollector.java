@@ -47,7 +47,6 @@ public class AckCollector {
     private boolean hasMajorityConsistent() {
         if (hashesPorPeer.size() < quorum) return false;
         if (agreedHash == null) return false;
-        // todos os hashes iguais ao agreedHash?
         for (String h : hashesPorPeer.values()) {
             if (!agreedHash.equals(h)) return false;
         }

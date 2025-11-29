@@ -1,0 +1,7 @@
+spring:
+  main:
+    web-application-type: servlet
+server:
+  port: 8080
+node:
+  role: leader

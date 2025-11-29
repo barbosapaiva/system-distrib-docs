@@ -1,0 +1,6 @@
+spring:
+  main:
+    web-application-type: none
+node:
+  role: worker
+  out-file: data/index-${random.int[5000,5999]}.jsonl
