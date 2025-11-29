@@ -100,4 +100,12 @@ public class VersionVectorService {
         public long ts()            { return ts; }
         public List<String> cids(){ return cids; }
     }
+
+    public int currentVersion() {
+        return currentVersion.get();
+    }
+
+    public synchronized List<String> committedCids() {
+        return List.copyOf(committed);
+    }
 }
