@@ -1,10 +1,51 @@
-pubsub:
-  topic: sd-index
-
+spring:
+  main:
+    web-application-type: servlet   # por defeito: líder com HTTP
 
 ipfs:
   api: http://127.0.0.1:5001/api/v0
 
-leader:
+pubsub:
+  topic: sd-index
+
+election:
   timeout:
-    ms: 10000
+    base:
+      ms: 5000
+    jitter:
+      ms: 3000
+  check:
+    interval:
+      ms: 250
+
+# Node ID por defeito
+node:
+  id: ${HOSTNAME:node-unknown}
+
+
+NOTA PARA ARRANQUE (tudo no mesmo PC):
+# 1) Arrancar IPFS (uma vez apenas):
+#      ipfs daemon
+#
+# 1.1) Build JAR
+#     ./gradlew bootJar
+# 2) Arrancar o LÍDER:
+#      java -jar build/libs/brain-0.0.1-SNAPSHOT.jar --server.port=8080 --node.id=node-a --cluster.quorum=1 --node.out-file=data/index-node-a.jsonl
+#
+# 3) Arrancar WORKER 1:
+#      java -jar build/libs/brain-0.0.1-SNAPSHOT.jar --server.port=8082 --node.id=node-b --cluster.quorum=1 --node.out-file=data/index-node-b.jsonl
+#
+# 4) Arrancar WORKER 2:
+#      java -jar build/libs/brain-0.0.1-SNAPSHOT.jar --server.port=8083 --node.id=node-c --cluster.quorum=1 --node.out-file=data/index-node-c.jsonl
+#
+# Todos ligam ao mesmo ipfs
+
+### Test
+#
+# curl -X POST "http://localhost:8080/documents" -F "file=@doc-teste-1.txt;type=text/plain"
+# curl -v -X POST "http://localhost:8080/documents" -F "file=@doc-teste-2.txt;type=text/plain"
+#
+# Search:
+# curl -G "http://localhost:8080/search"--data-urlencode "q=documento de teste sobre RAFT e IPFS"  --data-urlencode "top_k=5"
+#
+#

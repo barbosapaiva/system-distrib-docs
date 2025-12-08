@@ -2,9 +2,12 @@ package io.sd.brain.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.sd.brain.search.InMemoryIndex;
 import io.sd.brain.ipfs.IpfsClient;
 import io.sd.brain.pubsub.PubSubClient;
+import io.sd.brain.search.SearchMessages;
 import okhttp3.HttpUrl;
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -21,10 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.security.MessageDigest;
 import java.time.Duration;
-import java.util.Base64;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -47,49 +47,19 @@ public class ProcessorNode {
     private final List<String> currentCids = new CopyOnWriteArrayList<>();
     private volatile long currentVersion = 0L;
 
-    // - Timeouts de líder e heartbeats
-    private final long hbTimeoutMs = Long.parseLong(
-            System.getProperty("leader.timeout.ms",
-                    System.getenv().getOrDefault("LEADER_TIMEOUT_MS", "10000"))
-    );
-    private final long hbLeaderMs = Long.parseLong(
-            System.getProperty("leader.hb.ms",
-                    System.getenv().getOrDefault("LEADER_HB_MS","1500"))
-    );
-    private final long leaderLeaseMs = Long.parseLong(
-            System.getProperty("leader.lease.ms",
-                    System.getenv().getOrDefault("LEADER_LEASE_MS","3500"))
-    );
-
-    private final AtomicLong lastHbTs = new AtomicLong(0);
-    private volatile boolean leaderAlive = false;
-
-    // - RAFT state
-    private enum Role { FOLLOWER, CANDIDATE, LEADER }
-    private volatile Role role = Role.FOLLOWER;
-    private volatile long currentTerm = 0L;
-    private volatile String votedFor = null;
-    private final Set<String> votesThisTerm = ConcurrentHashMap.newKeySet();
-    private volatile int peersEstimate = 3; // atualizado com heartbeats do líder
-
-    private volatile String leaderIndexCid = "";
-    private volatile long lastLeaderHbSent = 0L;
-    private volatile long becameLeaderAt = 0L;
-
-    private final boolean workerFailover = Boolean.parseBoolean(
-            System.getProperty("worker.failover",
-                    System.getenv().getOrDefault("WORKER_FAILOVER", "false"))
-    );
-
     // - Controlo de agendamento de eleição com jitter
     private ScheduledExecutorService scheduler;
-    private ScheduledFuture<?> electionTask;
+
+    private final InMemoryIndex inMemoryIndex;
+
+    private final Map<String, List<SearchMessages.SearchItem>> localSearchResults = new ConcurrentHashMap<>();
 
     // ------------------------ Construtores --------------------
-    public ProcessorNode(String apiBaseUrl, String topic, String outFilePath) throws IOException {
+    public ProcessorNode(String apiBaseUrl, String topic, String outFilePath, RecoveryService recoveryService, InMemoryIndex inMemoryIndex) throws IOException {
         this.apiBase = apiBaseUrl.endsWith("/api/v0") ? apiBaseUrl : apiBaseUrl + "/api/v0";
         this.topic = topic;
         this.outFile = Paths.get(outFilePath);
+        this.inMemoryIndex = inMemoryIndex;
 
         Files.createDirectories(outFile.getParent() == null ? Paths.get(".") : outFile.getParent());
         if (!Files.exists(outFile)) Files.createFile(outFile);
@@ -106,17 +76,18 @@ public class ProcessorNode {
         this.peerId = System.getenv().getOrDefault("PEER_ID", host);
 
         // Estado inicial em memória
-        this.currentCids.addAll(readLocalCids());
-        this.currentVersion = localVersion();
+        RecoveryService.RecoveryState state = recoveryService.recover(outFile);
+        this.currentCids.clear();
+        this.currentCids.addAll(state.cids());
+        this.currentVersion = state.version();
 
-        log.info("Processor configurado: api={}, topic={}, out={}", apiBase, topic, outFile);
-    }
+        log.info("Processor configurado: api={}, topic={}, out={}, docs={}, version={}", apiBase, topic, outFile, currentCids.size(), currentVersion);    }
 
-    public ProcessorNode() throws IOException {
+    public ProcessorNode(InMemoryIndex inMemoryIndex, RecoveryService recoveryService) throws IOException {
         this(
                 System.getenv().getOrDefault("IPFS_API", "http://127.0.0.1:5001/api/v0"),
                 System.getenv().getOrDefault("PUBSUB_TOPIC", "sd-index"),
-                System.getenv().getOrDefault("OUT_FILE", "data/index.jsonl")
+                System.getenv().getOrDefault("OUT_FILE", "data/index.jsonl"), recoveryService, inMemoryIndex
         );
     }
 
@@ -131,7 +102,7 @@ public class ProcessorNode {
         try {
             if (!Files.exists(outFile)) return List.of();
             var lines = Files.readAllLines(outFile);
-            var out = new java.util.ArrayList<String>(lines.size());
+            var out = new ArrayList<String>(lines.size());
             for (String s : lines) {
                 if (s == null || s.isBlank()) continue;
                 var n = mapper.readTree(s);
@@ -253,7 +224,7 @@ public class ProcessorNode {
             );
             ((ObjectNode) msg).set("cids", mapper.valueToTree(cids));
         } else {
-            cids = new java.util.ArrayList<>(currentCids);
+            cids = new ArrayList<>(currentCids);
             cids.add(msg.path("cid").asText());
             ((ObjectNode) msg).set("cids", mapper.valueToTree(cids));
         }
@@ -295,6 +266,8 @@ public class ProcessorNode {
         }
 
         String cid = prep.path("cid").asText();
+        String name = prep.path("name").asText("");
+
         ObjectNode line = mapper.createObjectNode();
         line.put("kind", "index_update");
         line.put("cid", cid);
@@ -313,6 +286,21 @@ public class ProcessorNode {
             log.error("Falha a escrever index.jsonl: {}", e.toString());
         }
 
+        float[] vector = null;
+        if (prep.has("vector") && prep.get("vector").isArray()) {
+            ArrayNode arr = (ArrayNode) prep.get("vector");
+            vector = new float[arr.size()];
+            for (int i = 0; i < arr.size(); i++) {
+                vector[i] = (float) arr.get(i).asDouble();
+            }
+        }
+
+        // atualiza FAISS em memória
+        if (vector != null) {
+            inMemoryIndex.addOrUpdate(cid, vector);
+            inMemoryIndex.setName(cid, name);
+        }
+
         try {
             List<String> newCids = mapper.convertValue(
                     prep.get("cids"),
@@ -326,161 +314,13 @@ public class ProcessorNode {
         pendingVectors.remove(version);
     }
 
-    // - Eleição: randomização do atraso para reduzir ping-pong em 2 nós
-    private long randomElectionDelayMs() {
-        long half = Math.max(250, hbTimeoutMs / 2); // mínimo defensivo
-        return ThreadLocalRandom.current().nextLong(half);
-    }
-
-    private void cancelElectionTask() {
-        if (electionTask != null && !electionTask.isDone()) {
-            electionTask.cancel(false);
-        }
-        electionTask = null;
-    }
-
-    private void scheduleElectionWithJitter() {
-        if (!workerFailover) return;
-        if (role == Role.LEADER || role == Role.CANDIDATE) return;
-        if (electionTask != null && !electionTask.isDone()) return; // já agendado
-
-        long delay = randomElectionDelayMs();
-        electionTask = scheduler.schedule(this::startElection, delay, TimeUnit.MILLISECONDS);
-        log.warn("Timeout do líder - eleição agendada em {} ms", delay);
-    }
-
-    private void startElection() {
-        if (!workerFailover) return;
-        if (role == Role.LEADER) return; // líder não inicia eleições
-
-        role = Role.CANDIDATE;
-        currentTerm++;
-        votedFor = peerId;
-        votesThisTerm.clear();
-        votesThisTerm.add(peerId);
-
-        ObjectNode req = mapper.createObjectNode()
-                .put("kind", "vote_req")
-                .put("term", currentTerm)
-                .put("candidate_id", peerId)
-                .put("last_version", currentVersion);
-
-        try {
-            publishJsonToTopic(topic, mapper.writeValueAsBytes(req));
-            log.warn("CANDIDATE term={} iniciou eleição (last_version={})",
-                    currentTerm, currentVersion);
-        } catch (Exception e) {
-            log.warn("Falha a enviar vote_req: {}", e.toString());
-        }
-    }
-
-    private void handleVoteReq(JsonNode msg) {
-        long term = msg.path("term").asLong(0);
-        String cand = msg.path("candidate_id").asText("");
-        long lastV = msg.path("last_version").asLong(0);
-
-        if (term > currentTerm) { // termo mais recente → seguidor
-            currentTerm = term;
-            role = Role.FOLLOWER;
-            votedFor = null;
-        }
-
-        boolean grant = false;
-        if (term == currentTerm
-                && (votedFor == null || votedFor.equals(cand))
-                && lastV >= currentVersion) {
-            votedFor = cand;
-            grant = true;
-        }
-
-        ObjectNode resp = mapper.createObjectNode();
-        resp.put("kind", "vote_resp");
-        resp.put("term", currentTerm);
-        resp.put("voter_id", peerId);
-        resp.put("grant", grant);
-        try { publishJsonToTopic(topic, mapper.writeValueAsBytes(resp)); } catch (Exception ignore) {}
-        log.info("vote_req de {} term={} → grant={}", cand, term, grant);
-    }
-
-    private void handleVoteResp(JsonNode msg) {
-        long term = msg.path("term").asLong(0);
-        boolean grant = msg.path("grant").asBoolean(false);
-        String voter = msg.path("voter_id").asText("");
-
-        if (role != Role.CANDIDATE || term != currentTerm || !grant) return;
-
-        votesThisTerm.add(voter);
-        int majority = Math.max(1, (peersEstimate <= 0 ? 1 : (peersEstimate / 2 + 1)));
-        if (votesThisTerm.size() >= majority) {
-            becomeLeader();
-        }
-    }
-
-    private void becomeLeader() {
-        if (role == Role.LEADER) return;
-        role = Role.LEADER;
-        leaderAlive = true;
-        long now = System.currentTimeMillis();
-        lastHbTs.set(now);
-        becameLeaderAt = now;
-        cancelElectionTask();
-
-        try {
-            byte[] bytes = Files.exists(outFile) ? Files.readAllBytes(outFile) : new byte[0];
-            IpfsClient ipfs = new IpfsClient(apiBase);
-            String idxCid = ipfs.add("index.jsonl", bytes, true);
-            leaderIndexCid = idxCid;
-            lastLeaderHbSent = 0;
-            log.warn("Este nó tornou-se LEADER term={} index_cid={}", currentTerm, idxCid);
-        } catch (Exception e) {
-            log.warn("Leader sem snapshot publicado: {}", e.toString());
-            leaderIndexCid = "";
-        }
-
-        // HB imediato para estabilizar o cluster
-        maybeSendLeaderHeartbeat(true);
-    }
-
-    private void becomeFollower(long newTerm, String leaderId) {
-        cancelElectionTask();
-        if (newTerm > currentTerm) currentTerm = newTerm;
-        role = Role.FOLLOWER;
-        leaderAlive = true;
-        lastHbTs.set(System.currentTimeMillis());
-        log.info("Step-down: recebi hb com term={} (eu era FOLLOWER).", newTerm);
-    }
-
-    private void handleHeartbeat(JsonNode msg) {
-        long term = msg.path("term").asLong(0L);
-        String id  = msg.path("id").asText("");
-        if (id.equals(peerId)) return; // ignora o próprio HB
-
-        lastHbTs.set(System.currentTimeMillis());
-        leaderAlive = true;
-
-        // Atualiza estimativa de peers se presente
-        int p = msg.path("peers_estimate").asInt(-1);
-        if (p > 0) peersEstimate = Math.max(peersEstimate, p);
-
-        if (term > currentTerm) {
-            becomeFollower(term, id);
-        } else if (term == currentTerm && role == Role.LEADER) {
-            // Desempate determinístico com lease para evitar ping-pong
-            boolean otherWins = id.compareTo(peerId) < 0; // escolhe 'menor' como vencedor
-            boolean leaseExpired = (System.currentTimeMillis() - becameLeaderAt) > leaderLeaseMs;
-            if (otherWins && leaseExpired) {
-                becomeFollower(term, id);
-            }
-        }
-
-        long leaderV = msg.path("version").asLong(0);
-        String idxCid  = msg.path("index_cid").asText(null);
-        if (idxCid == null || idxCid.isBlank()) return;
+    private void handleHeartbeat(long leaderVersion, String indexCid) {
+        if (indexCid == null || indexCid.isBlank()) return;
 
         long vLocal = localVersion();
-        if (leaderV > vLocal) {
+        if (leaderVersion > vLocal) {
             try {
-                byte[] bytes = ipfsCat(idxCid);
+                byte[] bytes = ipfsCat(indexCid);
                 Path tmp = outFile.resolveSibling(outFile.getFileName() + ".tmp");
                 Files.createDirectories(outFile.getParent());
                 Files.write(tmp, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
@@ -489,10 +329,9 @@ public class ProcessorNode {
                 } catch (AtomicMoveNotSupportedException e) {
                     Files.move(tmp, outFile, StandardCopyOption.REPLACE_EXISTING);
                 }
-                log.info("Sync por snapshot: index.jsonl v{} ({} bytes)", leaderV, bytes.length);
+                log.info("Sync por snapshot: index.jsonl v{} ({} bytes)", leaderVersion, bytes.length);
                 pendingPrepare.clear();
 
-                // recarrega estado em memória
                 currentCids.clear();
                 currentCids.addAll(readLocalCids());
                 currentVersion = localVersion();
@@ -502,26 +341,15 @@ public class ProcessorNode {
         }
     }
 
-    private void maybeSendLeaderHeartbeat() { maybeSendLeaderHeartbeat(false); }
-
-    private void maybeSendLeaderHeartbeat(boolean forceNow) {
-        if (role != Role.LEADER) return;
-        long now = System.currentTimeMillis();
-        if (!forceNow && (now - lastLeaderHbSent) < hbLeaderMs) return;
-        lastLeaderHbSent = now;
-
-        var hb = new java.util.HashMap<String,Object>();
-        hb.put("kind", "hb");
-        hb.put("role", "leader");
-        hb.put("id", peerId);
-        hb.put("ts", now);
-        hb.put("term", currentTerm);
-        hb.put("version", localVersion());
-        if (leaderIndexCid != null && !leaderIndexCid.isBlank()) hb.put("index_cid", leaderIndexCid);
-        hb.put("peers_estimate", Math.max(peersEstimate, votesThisTerm.size()));
-
-        try { publishJsonToTopic(topic, mapper.writeValueAsBytes(mapper.valueToTree(hb))); }
-        catch (Exception ignore) {}
+    private List<SearchMessages.SearchItem> runLocalSearch(String prompt, int topK) {
+        try {
+            var items = inMemoryIndex.search(prompt, topK);
+            log.info("runLocalSearch: {} resultados para '{}'", items.size(), prompt);
+            return items;
+        } catch (Exception e) {
+            log.warn("runLocalSearch falhou: {}", e.toString());
+            return List.of();
+        }
     }
 
     public void run() throws Exception {
@@ -532,19 +360,17 @@ public class ProcessorNode {
         });
 
         scheduler.scheduleAtFixedRate(() -> {
-            long last = lastHbTs.get();
-            long now  = System.currentTimeMillis();
-
-            if (role != Role.LEADER) {
-                if (leaderAlive && last > 0 && (now - last) > hbTimeoutMs) {
-                    leaderAlive = false;
-                    pendingPrepare.clear();
-                    scheduleElectionWithJitter();
-                }
+            try {
+                var hb = new HashMap<String,Object>();
+                hb.put("kind","worker_hb");
+                hb.put("peer_id", peerId);
+                hb.put("load", 0);
+                hb.put("ts", System.currentTimeMillis());
+                publishJsonToTopic(topic, mapper.writeValueAsBytes(mapper.valueToTree(hb)));
+            } catch (Exception e) {
+                log.warn("Falha a enviar worker_hb: {}", e.toString());
             }
-
-            maybeSendLeaderHeartbeat();
-        }, 500, 500, TimeUnit.MILLISECONDS);
+        }, 1000, 3000, TimeUnit.MILLISECONDS);
 
         int backoff = 2;
         for (;;) {
@@ -573,14 +399,48 @@ public class ProcessorNode {
                         switch (kind) {
                             case "prepare"      -> handlePrepare(msg);
                             case "commit"       -> handleCommit(msg);
-                            case "hb"           -> handleHeartbeat(msg);
-                            case "vote_req"     -> handleVoteReq(msg);
-                            case "vote_resp"    -> handleVoteResp(msg);
+                            case "hb" -> {
+                                long leaderVersion = msg.path("version").asLong(0L);
+                                String indexCid    = msg.path("index_cid").asText(null);
+                                handleHeartbeat(leaderVersion, indexCid);
+                            }
+                            case "vote_req"     -> { }
+                            case "vote_resp"    -> { }
+                            case "worker_hb"    -> { }
                             case "index_update" -> {
                                 Files.writeString(outFile, text + System.lineSeparator(), StandardOpenOption.APPEND);
                                 log.info("IndexUpdate recebido (legacy): {}", msg.path("cid").asText(""));
                             }
                             case "ack" -> { /* ignorar acks de outros */ }
+                            case "search_req" -> {
+                                String target = msg.path("target_peer").asText("");
+                                if (!target.isBlank() && !peerId.equals(target)) break;
+                                String jobId = msg.path("job_id").asText();
+                                String prompt = msg.path("prompt").asText("");
+                                int topK = msg.path("top_k").asInt(5);
+                                try {
+                                    var items = runLocalSearch(prompt, topK);
+                                    localSearchResults.put(jobId, items);
+
+                                    var res = new HashMap<String,Object>();
+                                    res.put("kind","search_result");
+                                    res.put("job_id", jobId);
+                                    res.put("worker_id", peerId);
+                                    res.put("items", items);
+                                    res.put("ts", System.currentTimeMillis());
+                                    publishJsonToTopic(topic, mapper.writeValueAsBytes(mapper.valueToTree(res)));
+                                    log.info("search_result publicado: job={} items={}", jobId, items.size());
+                                } catch (Exception e) {
+                                    var res = new HashMap<String,Object>();
+                                    res.put("kind","search_result");
+                                    res.put("job_id", jobId);
+                                    res.put("worker_id", peerId);
+                                    res.put("items", List.of());
+                                    res.put("ts", System.currentTimeMillis());
+                                    publishJsonToTopic(topic, mapper.writeValueAsBytes(mapper.valueToTree(res)));
+                                    log.warn("Falha a executar pesquisa: {} job={}", e.toString(), jobId);
+                                }
+                            }
                             default -> log.warn("Mensagem desconhecida 'kind={}', payload={}", kind, text);
                         }
                     } catch (Exception perLine) {

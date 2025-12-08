@@ -13,7 +13,7 @@ import java.util.UUID;
 public class IpfsClient {
     private final String apiBase; // pode vir com ou sem /api/v0
     private final ObjectMapper mapper = new ObjectMapper();
-    // timeouts razoáveis (podes tornar configuráveis)
+    // timeouts razoáveis
     private final int connectTimeoutMs = 10_000;
     private final int readTimeoutMs    = 60_000;
 

@@ -1,9 +1,8 @@
 package io.sd.brain.pubsub;
 
-import io.sd.brain.cluster.NodeRoleManager;
+import io.sd.brain.node.NodeRoleManager;
 import io.sd.brain.index.VersionVectorService;
 import org.springframework.scheduling.annotation.Scheduled;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,18 +24,17 @@ public class HeartbeatPublisher {
         this.topic = topic;
     }
 
-    @Scheduled(fixedRateString = "${hb.interval.ms:3000}")
-    public void tick() {
-        if (!roles.isLeader()) return;
-
-        Map<String, Object> hb = new HashMap<>();
-        hb.put("kind", "hb");
-        hb.put("term", roles.term());
-        hb.put("id", roles.myId());
-        hb.put("ts", currentTimeMillis());
-        hb.put("version", cluster.getVersion());
-        hb.put("index_cid", cluster.getIndexCid());
-
-        pub.publishJson(topic, hb);
-    }
+//    @Scheduled(fixedRateString = "${hb.interval.ms:3000}")
+//    public void tick() {
+//        if (!roles.isLeader()) return;
+//
+//        Map<String, Object> hb = new HashMap<>();
+//        hb.put("kind", "hb");
+//        hb.put("term", roles.term());
+//        hb.put("ts", currentTimeMillis());
+//        hb.put("version", cluster.getVersion());
+//        hb.put("index_cid", cluster.getIndexCid());
+//
+//        pub.publishJson(topic, hb);
+//    }
 }

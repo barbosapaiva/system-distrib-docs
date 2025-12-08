@@ -2,7 +2,7 @@ package io.sd.brain.rest;
 
 import ai.djl.translate.TranslateException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.sd.brain.cluster.NodeRoleManager;
+import io.sd.brain.node.NodeRoleManager;
 import io.sd.brain.consensus.AckCollector;
 import io.sd.brain.consensus.AckService;
 import io.sd.brain.emb.EmbeddingService;

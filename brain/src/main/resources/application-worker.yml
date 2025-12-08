@@ -1,6 +1,12 @@
+server:
+  port: 0
+
 spring:
   main:
     web-application-type: none
+
 node:
   role: worker
+  id: worker-${random.int[1,9999]}
   out-file: data/index-${random.int[5000,5999]}.jsonl
+
