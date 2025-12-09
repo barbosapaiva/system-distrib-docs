@@ -1,8 +1,12 @@
 package io.sd.brain.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.sd.brain.cluster.NodeRoleManager;
+import io.sd.brain.node.NodeRoleManager;
+import io.sd.brain.cluster.LeaderElectionTask;
+import io.sd.brain.cluster.WorkerDirectory;
 import io.sd.brain.consensus.AckService;
+import io.sd.brain.node.RecoveryService;
+import io.sd.brain.search.InMemoryIndex;
 import io.sd.brain.node.ProcessorNode;
 import io.sd.brain.pubsub.PubSubService;
 import io.sd.brain.pubsub.PubSubSubscriber;
@@ -12,10 +16,10 @@ import io.sd.brain.rest.DocumentController;
 import io.sd.brain.emb.EmbeddingService;
 import io.sd.brain.index.VersionVectorService;
 import io.sd.brain.ipfs.IpfsClient;
+import io.sd.brain.search.SearchJobRegistry;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.slf4j.Logger;
@@ -48,43 +52,51 @@ public class NodeConfig {
         return new DocumentController(om, ipfs, emb, vv, pubsub, acks, cluster, roles, topic, quorum);
     }
 
-    // Sempre ativo. Só publica heartbeat quando roles.isLeader() for true
     @Bean
-    HeartbeatPublisher heartbeatPublisher(
-            PubSubService pubsub,
-            ClusterState cluster,
-            VersionVectorService vv,
-            NodeRoleManager roles,
-            @Value("${pubsub.topic:sd-index}") String topic
+    public NodeRoleManager nodeRoleManager(
+            @Value("${node.id:${HOSTNAME:unknown}}") String myId,
+            @Value("${election.timeout.base.ms:5000}") long baseTimeout,
+            @Value("${election.timeout.jitter.ms:3000}") long jitter
     ) {
-        return new HeartbeatPublisher(pubsub, cluster, vv, roles, topic);
+        return new NodeRoleManager(myId, baseTimeout, jitter);
     }
 
-    // Sempre ativo. Nos ACKs, só regista se for líder.
+    @Bean
+    public HeartbeatPublisher heartbeatPublisher(NodeRoleManager roles,
+                                                 ClusterState clusterState,
+                                                 VersionVectorService vv,
+                                                 PubSubService pubSub,
+                                                 @Value("${pubsub.topic:sd-index}") String topic) {
+        return new HeartbeatPublisher(pubSub, clusterState, vv, roles, topic);
+    }
+
     @Bean
     PubSubSubscriber pubSubSubscriber(
             AckService acks,
             ClusterState cluster,
             NodeRoleManager roles,
+            WorkerDirectory workers,
+            SearchJobRegistry jobs,
+            PubSubService pub,
             @Value("${ipfs.api}") String api,
-            @Value("${pubsub.topic:sd-index}") String topic
+            @Value("${pubsub.topic:sd-index}") String topic,
+            @Value("${cluster.quorum:1}") int quorum
     ) {
-        return new PubSubSubscriber(api, topic, acks, cluster, roles);
+        return new PubSubSubscriber(api, topic, acks, cluster, roles, workers, jobs, pub, quorum);
     }
 
-    // Processor apenas nos workers
     @Bean
-    @ConditionalOnProperty(name = "node.role", havingValue = "worker")
     ProcessorNode processorNode(
+            InMemoryIndex inMemoryIndex,
+            RecoveryService recoveryService,
             @Value("${ipfs.api}") String api,
             @Value("${pubsub.topic:sd-index}") String topic,
             NodeProperties props
     ) throws Exception {
-        return new ProcessorNode(api, topic, props.outFile());
+        return new ProcessorNode(api, topic, props.outFile(), recoveryService, inMemoryIndex);
     }
 
     @Bean
-    @ConditionalOnProperty(name = "node.role", havingValue = "worker")
     ApplicationRunner startProcessor(ProcessorNode node) {
         return args -> {
             Thread t = new Thread(() -> {
@@ -99,5 +111,17 @@ public class NodeConfig {
     ApplicationRunner logRole(@Value("${node.role:leader}") String role,
                               @Value("${server.port:disabled}") String port) {
         return args -> log.info("Node role={}, server.port={}", role, port);
+    }
+
+    @Bean
+    public WorkerDirectory workerDirectory() { return new WorkerDirectory(); }
+
+    @Bean
+    public LeaderElectionTask leaderElectionTask(NodeRoleManager roles,
+                                                 ClusterState clusterState,
+                                                 PubSubService pubSub,
+                                                 @Value("${pubsub.topic:sd-index}") String topic,
+                                                 @Value("${cluster.quorum:1}") int quorum) {
+        return new LeaderElectionTask(roles, clusterState, pubSub, topic, quorum);
     }
 }

@@ -1,7 +1,12 @@
+server:
+  port: 8080
+
 spring:
   main:
     web-application-type: servlet
-server:
-  port: 8080
+
 node:
   role: leader
+  id: leader-1
+
+# .api (http://127.0.0.1:5001/api/v0) e ao mesmo tópico pubsub.topic=sd-index
